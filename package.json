@@ -1,19 +1,16 @@
 {
-  "name": "lanshare",
+  "name": "screen-share-app",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Simple Screen Share",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "express": "^5.2.1",
-    "qrcode-terminal": "^0.12.0",
-    "screenshot-desktop": "^1.15.3",
-    "socket.io": "^4.8.3"
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }

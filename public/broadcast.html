@@ -2,23 +2,54 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Host - Share Screen & Audio</title>
+    <title>Host - Select Mode</title>
     <style>
-        body { font-family: sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
-        button { padding: 15px 30px; font-size: 20px; cursor: pointer; background: #d32f2f; color: white; border: none; border-radius: 5px; }
-        button:hover { background: #b71c1c; }
+        body { font-family: sans-serif; text-align: center; margin-top: 30px; background: #f0f0f0; }
+        
+        /* สไตล์ปุ่มและตัวเลือก */
+        .control-panel {
+            background: white; padding: 20px; border-radius: 10px;
+            display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            max-width: 400px;
+        }
+        button { 
+            padding: 12px 25px; font-size: 18px; cursor: pointer; 
+            background: #007bff; color: white; border: none; border-radius: 5px; margin-top: 15px; width: 100%;
+        }
+        button:hover { background: #0056b3; }
+        
+        .mode-select { text-align: left; margin: 15px 0; }
+        .mode-select label { display: block; margin-bottom: 10px; cursor: pointer; font-size: 16px;}
+        .mode-select input { margin-right: 10px; transform: scale(1.2); }
+
         video, canvas { display: none; }
-        .status { margin-top: 20px; color: #555; }
-        .note { color: #f57c00; font-weight: bold; margin-top: 10px;}
+        .status { margin-top: 15px; color: #555; font-size: 14px;}
+        .note { color: #d32f2f; font-size: 13px; margin-top: 10px; text-align: left;}
     </style>
 </head>
 <body>
 
-    <h1>💻 Host Page (Video + Audio)</h1>
-    <p>กดปุ่มเพื่อเริ่มแชร์ (อย่าลืมติ๊ก <b>"Share system audio"</b> ในหน้าต่างที่เด้งขึ้นมา)</p>
-    <button id="startBtn">🔴 Start Sharing</button>
-    <div class="status" id="status">สถานะ: รอเริ่ม...</div>
-    <div class="note">หมายเหตุ: เสียงจะมาก็ต่อเมื่อคุณเลือกแชร์ "Entire Screen" หรือ "Tab" (Window บางอันไม่มีเสียง)</div>
+    <div class="control-panel">
+        <h1>🎧 Broadcast Studio</h1>
+        
+        <div class="mode-select">
+            <label>
+                <input type="radio" name="mode" value="av" checked> 
+                📺 <b>Video + Audio</b> (แชร์ทั้งภาพและเสียง)
+            </label>
+            <label>
+                <input type="radio" name="mode" value="audio"> 
+                🎵 <b>Audio Only</b> (แชร์แค่เสียง ประหยัดเน็ต)
+            </label>
+        </div>
+
+        <div class="note">
+            * จำเป็นต้องติ๊ก <b>"Share system audio"</b> ในหน้าต่างถัดไปเสมอ
+        </div>
+
+        <button id="startBtn">🔴 Start Broadcasting</button>
+        <div class="status" id="status">Status: Standby</div>
+    </div>
 
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
@@ -32,68 +63,82 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
-        // ตั้งค่า Video
-        const FPS = 10; 
+        // ตั้งค่า
+        const FPS = 10;
         const SCALE = 0.5;
         const QUALITY = 0.5;
+        const AUDIO_BUFFER = 4096;
+
+        // รูปภาพที่จะโชว์ตอนเลือก Audio Only (เป็น Base64 สีดำง่ายๆ เขียนคำว่า Audio Only)
+        // คุณสามารถเอารูปอื่นมาแปลงเป็น Base64 ใส่แทนได้
+        const AUDIO_PLACEHOLDER = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgNDAwIDMwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzIyMiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIzMCIgZmlsbD0iIzRmYWNmZSI+8J+NjSBBdWRpbyBPbmx5PC90ZXh0Pjwvc3ZnPg==";
 
         startBtn.addEventListener('click', async () => {
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            
             try {
-                // 1. ขอแชร์ทั้งภาพและเสียง
+                // 1. ขอแชร์หน้าจอ (จำเป็นต้องขอแม้จะเอาแค่เสียง)
                 const stream = await navigator.mediaDevices.getDisplayMedia({ 
                     video: { cursor: "always" }, 
                     audio: {
-                        echoCancellation: false, // ปิดตัดเสียงสะท้อนเพื่อให้ได้เสียงเพลงชัดๆ
+                        echoCancellation: false, 
                         noiseSuppression: false,
                         autoGainControl: false
                     } 
                 });
 
                 video.srcObject = stream;
-                status.innerText = "สถานะ: กำลังแชร์...";
-                startBtn.style.display = 'none';
+                status.innerText = `Status: Broadcasting (${mode === 'av' ? 'Video+Audio' : 'Audio Only'})...`;
+                status.style.color = "green";
+                startBtn.style.display = 'none'; // ซ่อนปุ่ม
 
-                // --- ส่วนจัดการ VIDEO ---
-                setInterval(() => {
-                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                        canvas.width = video.videoWidth * SCALE;
-                        canvas.height = video.videoHeight * SCALE;
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const imageData = canvas.toDataURL("image/jpeg", QUALITY);
-                        socket.emit("stream_data", imageData);
-                    }
-                }, 1000 / FPS);
+                // ============================
+                // 📡 ส่วนจัดการภาพ (VIDEO)
+                // ============================
+                if (mode === 'av') {
+                    // โหมดปกติ: ส่งภาพตามรอบ FPS
+                    setInterval(() => {
+                        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                            canvas.width = video.videoWidth * SCALE;
+                            canvas.height = video.videoHeight * SCALE;
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            const imageData = canvas.toDataURL("image/jpeg", QUALITY);
+                            socket.emit("stream_data", imageData);
+                        }
+                    }, 1000 / FPS);
+                } else {
+                    // โหมด Audio Only: ส่งภาพนิ่งไปทีเดียวพอ จบ!
+                    socket.emit("stream_data", AUDIO_PLACEHOLDER);
+                    
+                    // (Optional) อาจจะส่งซ้ำทุก 5 วิ เผื่อคนเพิ่งเข้ามาใหม่
+                    setInterval(() => {
+                        socket.emit("stream_data", AUDIO_PLACEHOLDER);
+                    }, 5000);
+                }
 
-                // --- ส่วนจัดการ AUDIO ---
+                // ============================
+                // 🔊 ส่วนจัดการเสียง (AUDIO)
+                // ============================
                 if (stream.getAudioTracks().length > 0) {
                     const audioCtx = new AudioContext();
                     const source = audioCtx.createMediaStreamSource(stream);
-                    
-                    // ใช้ ScriptProcessor เพื่อดึงข้อมูลเสียงดิบ (PCM)
-                    // bufferSize 4096 = ส่งข้อมูลทุกๆ ประมาณ 0.09 วินาที
-                    const processor = audioCtx.createScriptProcessor(4096, 1, 1); 
+                    const processor = audioCtx.createScriptProcessor(AUDIO_BUFFER, 1, 1);
                     
                     source.connect(processor);
-                    processor.connect(audioCtx.destination); // ต้อง connect ปลายทาง ไม่งั้นมันไม่ทำงาน
+                    processor.connect(audioCtx.destination);
 
                     processor.onaudioprocess = (e) => {
-                        // ดึงข้อมูลเสียง (Float32Array: -1.0 ถึง 1.0)
                         const inputData = e.inputBuffer.getChannelData(0); 
-                        
-                        // แปลงเป็น Int16 เพื่อประหยัดเน็ต (จากทศนิยมเยอะๆ เหลือเลขจำนวนเต็ม)
-                        // เหมือนการบีบอัดแบบง่ายๆ
                         const pcmData = new Int16Array(inputData.length);
                         for (let i = 0; i < inputData.length; i++) {
-                            // แปลงช่วง -1..1 ให้เป็น -32768..32767
                             let s = Math.max(-1, Math.min(1, inputData[i]));
                             pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                         }
-                        
-                        // ส่งไปที่ Server
                         socket.emit("stream_audio", pcmData.buffer);
                     };
                 } else {
-                    status.innerText += " (⚠️ ไม่ได้แชร์เสียง)";
+                    status.innerText += " (⚠️ Warning: No Audio Detected)";
+                    alert("คุณไม่ได้แชร์เสียง! กรุณากด Stop แล้วเริ่มใหม่ โดยติ๊ก 'Share system audio'");
                 }
 
             } catch (err) {
