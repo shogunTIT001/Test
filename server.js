@@ -5,7 +5,7 @@ const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 const path = require("path");
 const os = require("os");
-const qrcode = require("qrcode-terminal");
+// const qrcode = require("qrcode-terminal");
 
 const port = process.env.PORT || 3000;
 
@@ -47,7 +47,7 @@ http.listen(port, () => {
     if(mainIp) {
         const url = `http://${mainIp}:${port}`;
         console.log(`📱 Viewer (คนดู): ${url}`);
-        qrcode.generate(url, { small: true });
+        // qrcode.generate(url, { small: true });
     }
     console.log("==================================================\n");
 });
