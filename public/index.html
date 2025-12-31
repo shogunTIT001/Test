@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer - Video & Audio</title>
+    <style>
+        body { margin: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
+        img { width: 100%; height: 100%; object-fit: contain; }
+        
+        /* ปุ่มเปิดเสียง (สำคัญมาก) */
+        #mute-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 10; cursor: pointer;
+        }
+        #mute-btn {
+            padding: 20px 40px; font-size: 24px; background: #28a745; color: white; border: none; border-radius: 50px;
+        }
+    </style>
+</head>
+<body>
+
+    <img id="screen" src="" alt="Waiting...">
+
+    <div id="mute-overlay">
+        <button id="mute-btn">🔊 กดเพื่อฟังเสียง</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const img = document.getElementById("screen");
+        const muteOverlay = document.getElementById('mute-overlay');
+        
+        let audioCtx;
+        let nextTime = 0; // ตัวแปรช่วยเรียงเสียงให้ต่อเนื่อง
+
+        // ต้องกดปุ่มก่อนถึงจะเริ่ม AudioContext ได้ (กฎของ Browser)
+        muteOverlay.addEventListener('click', () => {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            muteOverlay.style.display = 'none'; // ซ่อนปุ่ม
+            console.log("Audio Context Started");
+        });
+
+        // 1. รับภาพ
+        socket.on("stream_data", (data) => {
+            img.src = data;
+        });
+
+        // 2. รับเสียง
+        socket.on("stream_audio", (arrayBuffer) => {
+            if (!audioCtx) return; // ถ้ายังไม่กดปุ่มฟังเสียง ก็ไม่ต้องทำอะไร
+
+            // แปลง Int16 กลับเป็น Float32
+            const int16 = new Int16Array(arrayBuffer);
+            const float32 = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) {
+                float32[i] = int16[i] / 32768; // แปลงกลับเป็นช่วง -1..1
+            }
+
+            // สร้าง Audio Buffer
+            const audioBuffer = audioCtx.createBuffer(1, float32.length, audioCtx.sampleRate);
+            audioBuffer.getChannelData(0).set(float32);
+
+            // สร้าง Source เพื่อเล่น
+            const source = audioCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioCtx.destination);
+
+            // การ Sync เวลา (สำคัญมากเพื่อให้เสียงต่อเนื่องไม่กระตุก)
+            if (nextTime < audioCtx.currentTime) {
+                nextTime = audioCtx.currentTime;
+            }
+            source.start(nextTime);
+            
+            // ขยับเวลาเริ่มของ chunk ถัดไปไปรอไว้เลย
+            nextTime += audioBuffer.duration;
+        });
+    </script>
+</body>
+</html>

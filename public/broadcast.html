@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Host - Share Screen & Audio</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
+        button { padding: 15px 30px; font-size: 20px; cursor: pointer; background: #d32f2f; color: white; border: none; border-radius: 5px; }
+        button:hover { background: #b71c1c; }
+        video, canvas { display: none; }
+        .status { margin-top: 20px; color: #555; }
+        .note { color: #f57c00; font-weight: bold; margin-top: 10px;}
+    </style>
+</head>
+<body>
+
+    <h1>💻 Host Page (Video + Audio)</h1>
+    <p>กดปุ่มเพื่อเริ่มแชร์ (อย่าลืมติ๊ก <b>"Share system audio"</b> ในหน้าต่างที่เด้งขึ้นมา)</p>
+    <button id="startBtn">🔴 Start Sharing</button>
+    <div class="status" id="status">สถานะ: รอเริ่ม...</div>
+    <div class="note">หมายเหตุ: เสียงจะมาก็ต่อเมื่อคุณเลือกแชร์ "Entire Screen" หรือ "Tab" (Window บางอันไม่มีเสียง)</div>
+
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // ตั้งค่า Video
+        const FPS = 10; 
+        const SCALE = 0.5;
+        const QUALITY = 0.5;
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                // 1. ขอแชร์ทั้งภาพและเสียง
+                const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: { cursor: "always" }, 
+                    audio: {
+                        echoCancellation: false, // ปิดตัดเสียงสะท้อนเพื่อให้ได้เสียงเพลงชัดๆ
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    } 
+                });
+
+                video.srcObject = stream;
+                status.innerText = "สถานะ: กำลังแชร์...";
+                startBtn.style.display = 'none';
+
+                // --- ส่วนจัดการ VIDEO ---
+                setInterval(() => {
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.width = video.videoWidth * SCALE;
+                        canvas.height = video.videoHeight * SCALE;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = canvas.toDataURL("image/jpeg", QUALITY);
+                        socket.emit("stream_data", imageData);
+                    }
+                }, 1000 / FPS);
+
+                // --- ส่วนจัดการ AUDIO ---
+                if (stream.getAudioTracks().length > 0) {
+                    const audioCtx = new AudioContext();
+                    const source = audioCtx.createMediaStreamSource(stream);
+                    
+                    // ใช้ ScriptProcessor เพื่อดึงข้อมูลเสียงดิบ (PCM)
+                    // bufferSize 4096 = ส่งข้อมูลทุกๆ ประมาณ 0.09 วินาที
+                    const processor = audioCtx.createScriptProcessor(4096, 1, 1); 
+                    
+                    source.connect(processor);
+                    processor.connect(audioCtx.destination); // ต้อง connect ปลายทาง ไม่งั้นมันไม่ทำงาน
+
+                    processor.onaudioprocess = (e) => {
+                        // ดึงข้อมูลเสียง (Float32Array: -1.0 ถึง 1.0)
+                        const inputData = e.inputBuffer.getChannelData(0); 
+                        
+                        // แปลงเป็น Int16 เพื่อประหยัดเน็ต (จากทศนิยมเยอะๆ เหลือเลขจำนวนเต็ม)
+                        // เหมือนการบีบอัดแบบง่ายๆ
+                        const pcmData = new Int16Array(inputData.length);
+                        for (let i = 0; i < inputData.length; i++) {
+                            // แปลงช่วง -1..1 ให้เป็น -32768..32767
+                            let s = Math.max(-1, Math.min(1, inputData[i]));
+                            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                        }
+                        
+                        // ส่งไปที่ Server
+                        socket.emit("stream_audio", pcmData.buffer);
+                    };
+                } else {
+                    status.innerText += " (⚠️ ไม่ได้แชร์เสียง)";
+                }
+
+            } catch (err) {
+                console.error(err);
+                status.innerText = "Error: " + err.message;
+            }
+        });
+    </script>
+</body>
+</html>
