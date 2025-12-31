@@ -122,18 +122,32 @@
                 if (stream.getAudioTracks().length > 0) {
                     const audioCtx = new AudioContext();
                     const source = audioCtx.createMediaStreamSource(stream);
+
+                    // ใช้ AUDIO_BUFFER ที่เราแก้เป็น 16384
                     const processor = audioCtx.createScriptProcessor(AUDIO_BUFFER, 1, 1);
-                    
+
                     source.connect(processor);
                     processor.connect(audioCtx.destination);
 
                     processor.onaudioprocess = (e) => {
                         const inputData = e.inputBuffer.getChannelData(0); 
-                        const pcmData = new Int16Array(inputData.length);
-                        for (let i = 0; i < inputData.length; i++) {
+                        
+                        // --- 🔧 จุดปรับปรุง: ลดคุณภาพเสียงลงเพื่อประหยัดเน็ต (Downsampling) ---
+                        // ปกติเสียงจะมา 44100 หรือ 48000 Hz ซึ่งเยอะเกินความจำเป็นสำหรับการสตรีมเล่นๆ
+                        // เราจะเก็บแค่ "ทุกๆ 2 ค่า" (Downsample Factor = 2) 
+                        // จะทำให้ข้อมูลเล็กลงครึ่งหนึ่ง แต่เสียงยังฟังรู้เรื่องดีอยู่
+                        
+                        const step = 2; // เก็บ 1 ข้าม 1 (ถ้าเน็ตช้ามาก ปรับเป็น 4 ได้)
+                        const pcmData = new Int16Array(Math.floor(inputData.length / step));
+                        
+                        let index = 0;
+                        for (let i = 0; i < inputData.length; i += step) {
                             let s = Math.max(-1, Math.min(1, inputData[i]));
-                            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                            pcmData[index] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                            index++;
                         }
+                        
+                        // ส่งข้อมูลที่เล็กลงแล้วไป
                         socket.emit("stream_audio", pcmData.buffer);
                     };
                 } else {

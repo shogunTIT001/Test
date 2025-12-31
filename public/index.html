@@ -51,17 +51,23 @@
 
         // 2. รับเสียง
         socket.on("stream_audio", (arrayBuffer) => {
-            if (!audioCtx) return; // ถ้ายังไม่กดปุ่มฟังเสียง ก็ไม่ต้องทำอะไร
+            if (!audioCtx) return;
 
-            // แปลง Int16 กลับเป็น Float32
             const int16 = new Int16Array(arrayBuffer);
             const float32 = new Float32Array(int16.length);
             for (let i = 0; i < int16.length; i++) {
-                float32[i] = int16[i] / 32768; // แปลงกลับเป็นช่วง -1..1
+                float32[i] = int16[i] / 32768;
             }
 
+            // --- 🔧 แก้ตรงนี้: หาร sampleRate ด้วยตัวเลข step ที่เราตั้งไว้ฝั่งส่ง ---
+            // ถ้าฝั่งส่ง step = 2, ฝั่งรับต้อง / 2
+            // ถ้าฝั่งส่ง step = 4, ฝั่งรับต้อง / 4
+            const adjustedSampleRate = audioCtx.sampleRate / 2; 
+
+            const audioBuffer = audioCtx.createBuffer(1, float32.length, adjustedSampleRate);
+
             // สร้าง Audio Buffer
-            const audioBuffer = audioCtx.createBuffer(1, float32.length, audioCtx.sampleRate);
+            //const audioBuffer = audioCtx.createBuffer(1, float32.length, audioCtx.sampleRate);
             audioBuffer.getChannelData(0).set(float32);
 
             // สร้าง Source เพื่อเล่น
